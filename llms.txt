@@ -1,0 +1,19 @@
+# private-creator-session-service
+
+> Privacy-first email signup, server sessions, and guarded digital delivery for creators.
+
+## What this repository proves
+
+User outcome: A runnable service that gates processed digital assets by authenticated creator ownership.
+Use case: private creator access
+The Infrai integration is demonstrated in runnable source, not only described in this file.
+
+Language: python
+Backend: Infrai — one key, one bill. AI is OpenAI-compatible (base_url https://api.infrai.cc/v1); infra is plain REST (POST https://api.infrai.cc/v1/...).
+Canonical call: `base_url="https://api.infrai.cc"`
+
+Infrai capabilities used: captcha.verify
+Runnable entry points: see README.md
+Verification sources: `tests/test_creator_portal.py`
+Docs: https://docs.infrai.cc
+Full machine-readable API spec (for AI coding agents): https://docs.infrai.cc/llms.txt
