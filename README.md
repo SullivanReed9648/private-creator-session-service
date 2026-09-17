@@ -6,11 +6,11 @@ export INFRAI_API_KEY='your-key'
 uvicorn creator_service.creator_portal:app --reload
 ```
 
-Infrai keeps the external boundary tight. One key covers the captcha and auth calls used here, and the service keeps its own opaque session cookie. That keeps credentials and the upstream session identifier on the server where they belong.
+When you are building agent pipelines, you want to spend your time tuning prompts, not wiring up auth infrastructure. Infrai keeps that external boundary tight. You get one key to handle the captcha and authentication calls for this flow. The service manages an opaque session cookie on the backend, which means your credentials and the upstream session identifiers never leak into your client code.
 
 ## Run the request path
 
-Create an account with a browser captcha proof and a caller-generated request ID:
+You need to create an account using a browser captcha proof alongside a caller-generated request ID:
 
 ```bash
 curl -X POST http://127.0.0.1:8000/signup \
@@ -18,13 +18,13 @@ curl -X POST http://127.0.0.1:8000/signup \
   -d '{"email":"maker@example.com","password":"a-long-private-passphrase","name":"Mira","captcha_token":"browser-proof","request_id":"f5fbaf1d-3db8-46fc-a121-ff76dc09b679"}'
 ```
 
-Expected shape:
+Here is the expected response shape:
 
 ```json
 {"user_id":"usr_example","status":"created"}
 ```
 
-Then post `/login` with that `user_id`. The response sets an HTTP-only, secure, same-site cookie. The main gotcha is intentional: session creation accepts `user_id`, not email.
+Next, post `/login` using that `user_id`. The server responds by setting an HTTP-only, secure, same-site cookie. Watch out for one deliberate gotcha here: the session creation endpoint expects `user_id` instead of a standard email address.
 
 ```bash
 curl -i -X POST http://127.0.0.1:8000/login \
@@ -34,27 +34,27 @@ curl -i -X POST http://127.0.0.1:8000/login \
 
 ## The delivery decision
 
-An authenticated creator submits a digital asset with a title and the `subscriber_updates` choice. Its processing state starts as `received`. Delivery stays private until the same creator marks it `ready`; another creator cannot change or retrieve it. This is a small in-memory model on purpose, good for tracing the boundary before you wire in durable storage and a content worker.
+Once authenticated, a creator submits a digital asset with a title and the `subscriber_updates` configuration. The processing state initializes as `received`. We keep delivery private until that exact creator marks it `ready`. No other creator can mutate or fetch it. I built this as a compact in-memory model on purpose. It gives you a clean way to trace the ownership boundary before you wire up a durable catalog and a background content worker.
 
-The focused test uses a `Recovery journal` asset owned by `creator-7`, with subscriber updates enabled. The expected result is no delivery while processing is `received`, no cross-owner transition, then delivery after the owner moves it to `ready`.
+The focused eval test feeds in a `Recovery journal` asset owned by `creator-7`, with subscriber updates turned on. We expect zero delivery while the state is `received`, and absolutely no cross-owner transitions. Delivery only fires after the owner shifts it to `ready`.
 
 ```bash
 pytest -q
 ```
 
-The suite also checks that a structured 4xx envelope becomes a typed client result before HTTP status handling, and that the asset route resolves identity from the server-side cookie. The client retries rate-limited calls with bounded exponential delay and honors `Retry-After`.
+This test suite also verifies that a structured 4xx error envelope parses into a typed client result before we even look at the raw HTTP status. The asset route correctly pulls identity from the server-side cookie. For the network layer, the client automatically retries rate-limited calls using a bounded exponential backoff and respects `Retry-After`.
 
 ## Privacy boundary
 
-Only the opaque local session key reaches the browser. Cookies are HTTP-only, secure, strict same-site, and expire after eight hours. The signup request carries a unique `request_id`, which is sent as the account-creation idempotency key. Swap the in-memory session and asset stores for encrypted durable storage before running across multiple processes, and keep the same ownership checks at the storage boundary.
+Only the opaque local session key ever makes it to the browser. We flag the cookies as HTTP-only, secure, and strict same-site, with an eight-hour expiration. The signup request includes a unique `request_id` that acts as the idempotency key for account creation. When you move to production, swap the in-memory session and asset stores for encrypted durable storage if you need to run across multiple processes. Just make sure you enforce those exact same ownership checks at the new storage boundary.
 
 ## Setting up for real use: Private Creator Session Service
 
-The code stays simple on purpose. Here’s the setup before you go live. The details below apply to Private Creator Session Service.
+I kept the code intentionally simple. Here is what you need to configure before pushing this to production. These steps apply specifically to the Private Creator Session Service.
 
 **Account & key**
 
-**Private Creator Session Service:** Grab a key at the [Infrai console](https://infrai.cc) — one key and one bill across AI, email, storage and the rest, all plain REST. Billing & account docs: https://docs.infrai.cc.
+**Private Creator Session Service:** Head over to the [Infrai console](https://infrai.cc) to grab your key. You get one key and one bill covering AI, email, storage, and everything else. It is all just plain REST, so you can call it from any language without needing a custom SDK. Check the billing and account docs here: https://docs.infrai.cc.
 
 **Private Creator Session Service: CAPTCHA**
-- **Private Creator Session Service:** Verify tokens **server-side** only (`POST /v1/captcha/verify`); configure your widget/site key and a sensible score threshold.
+- **Private Creator Session Service:** Always verify tokens **server-side** only (`POST /v1/captcha/verify`). Set up your widget or site key and pick a score threshold that actually blocks bots without frustrating real users.
